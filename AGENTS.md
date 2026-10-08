@@ -304,8 +304,9 @@ Output: a markdown report with severity levels (error, warning, suggestion).
 ## Hooks and Capture
 
 Generate absolute commands using `python scripts/install_hooks.py`; merge into an explicitly
-selected project with `--project /path/to/project`. Existing hooks are preserved and backed
-up. Hooks require Codex trust; never bypass that boundary. Nothing installs globally.
+selected project with `--project /path/to/project`, or user hooks with `--user`.
+`--root` separates data from code; `--replace-legacy` replaces only old codex-memory handlers. Existing hooks are preserved and backed
+up. Hooks require Codex trust; never bypass that boundary. User-level installation is explicit.
 
 - SessionStart injects at most roughly 20,000 characters of index and recent daily text,
   labeled as untrusted recall with the source path.
@@ -313,19 +314,20 @@ up. Hooks require Codex trust; never bypass that boundary. Nothing installs glob
 - The worker reads JSONL `response_item` / `message` records with user or assistant text.
   It ignores event mirrors, reasoning, tools, system/developer messages, and known injected
   user-context prefixes. Codex's transcript format is not a stable public API.
+- Common credential patterns are redacted locally before model calls and stored output.
 - A per-transcript byte cursor tracks complete lines. Incomplete final lines wait for the
   next event. Malformed JSON fails the capture without advancing past that line.
 - A process lock serializes capture, compilation, query-state updates, and lint-state updates.
   Cursor writes are atomic. Capture markers prevent duplicates after an append succeeds but
   cursor saving fails. Failed model calls leave the source eligible for retry.
 - Extraction batches target 15,000 characters, keeping individual messages intact.
-- After 18:00 local time, a successful capture invokes incremental compilation.
+- After 18:00 local time, a successful capture compiles today's changed log.
 
 ## Commands and State
 
-See README.md for commands. All content lives beside this repository, regardless of the
+See README.md for commands. Content lives at `CODEX_MEMORY_ROOT` (this repository by default), independent of the
 project invoking the hook. `daily/`, `knowledge/`, `reports/`, logs, cursors, locks, and
-`scripts/state.json` are ignored by Git. Daily files remain append-only.
+`.codex-memory-compiler/state.json` are ignored by Git. Daily files remain append-only.
 Compilation records source hashes only after a successful child run and index existence and build-log change checks.
 A failed compilation may leave partial Markdown edits; review them and rerun. It is not
 transactional and does not roll back model edits.

@@ -3,12 +3,13 @@ from contextlib import contextmanager
 import os
 import time
 
-from config import SCRIPTS_DIR
+from config import STATE_DIR
 
 
 @contextmanager
 def memory_lock():
-    with (SCRIPTS_DIR / ".memory.lock").open("a+b") as handle:
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    with (STATE_DIR / ".memory.lock").open("a+b") as handle:
         handle.seek(0)
         if os.name == "nt":
             import msvcrt

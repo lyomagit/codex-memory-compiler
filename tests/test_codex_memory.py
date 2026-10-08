@@ -16,6 +16,7 @@ import codex_runner
 import flush
 import install_hooks
 from transcript import read_messages
+from redact import redact
 
 
 def record(text, role="user", **extra):
@@ -39,6 +40,19 @@ class TranscriptTests(unittest.TestCase):
             rows = list(read_messages(path))
             self.assertEqual([t for _, t in rows if t], ["**User:** Use SQLite", "**Assistant:** Agreed"])
             self.assertEqual(list(read_messages(path, rows[-1][0])), [])
+
+    def test_nested_and_string_content(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "rollout.jsonl"
+            path.write_text(json.dumps({"type": "response_item", "payload": {"item": {
+                "type": "message", "role": "user", "content": "Use WAL"}}}) + "\n")
+            self.assertEqual(list(read_messages(path))[0][1], "**User:** Use WAL")
+
+    def test_secret_filter_before_model_and_storage(self):
+        for secret in ('password="example-value"', 'API_KEY=examplevalue',
+                       'Bearer abcdefghijklmnop', 'ghp_' + 'a' * 30,
+                       '-----BEGIN PRIVATE KEY-----\nsecret\n-----END PRIVATE KEY-----'):
+            self.assertEqual(redact(secret), "[REDACTED]")
 
     def test_utf8_cursor_and_partial_line(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -139,6 +153,24 @@ class RunnerTests(unittest.TestCase):
 
 
 class InstallerTests(unittest.TestCase):
+    def test_user_install_replaces_only_legacy_memory_and_dry_run_is_readonly(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            target = home / "hooks.json"
+            old = {"hooks": {"Stop": [{"hooks": [
+                {"type": "command", "command": "/old/bin/codex-memory capture --hook-mode"},
+                {"type": "command", "command": "python safety-guard.py"}]}]}}
+            target.write_text(json.dumps(old))
+            with patch.dict(os.environ, {"CODEX_HOME": str(home)}):
+                install_hooks.install(user=True, memory_root=home / "data", replace_legacy=True, dry_run=True)
+                self.assertEqual(json.loads(target.read_text()), old)
+                install_hooks.install(user=True, memory_root=home / "data", replace_legacy=True)
+            commands = [h["command"] for g in json.loads(target.read_text())["hooks"]["Stop"] for h in g["hooks"]]
+            self.assertEqual(len(commands), 2)
+            self.assertIn("python safety-guard.py", commands)
+            self.assertIn(str(home / "data"), commands[0])
+            self.assertNotIn("/old/bin", " ".join(commands))
+
     def test_merge_backup_idempotence_and_quoted_paths(self):
         with tempfile.TemporaryDirectory(prefix="memory test ") as directory:
             project = Path(directory)
@@ -236,7 +268,7 @@ class CliTests(unittest.TestCase):
                                 capture_output=True, text=True, timeout=5)
         self.assertEqual(result.returncode, 0, result.stderr)
         deadline = time.monotonic() + 10
-        state = self.root / "scripts/last-flush.json"
+        state = self.root / ".codex-memory-compiler/last-flush.json"
         while not state.exists() and time.monotonic() < deadline:
             time.sleep(0.05)
         self.assertTrue(state.exists())
@@ -249,12 +281,24 @@ class CliTests(unittest.TestCase):
             _, errors = child.communicate(timeout=10)
             self.assertEqual(child.returncode, 0, errors)
 
+    def test_separate_memory_root(self):
+        memory = self.root / "separate memory"
+        transcript = self.root / "rollout.jsonl"
+        transcript.write_text(record("Use SQLite"))
+        self.run_script("scripts/flush.py", str(transcript), "separate", CODEX_MEMORY_ROOT=str(memory))
+        self.assertTrue((memory / ".codex-memory-compiler/last-flush.json").exists())
+        self.assertFalse((self.root / "daily").exists())
+        self.run_script("scripts/compile.py", CODEX_MEMORY_ROOT=str(memory))
+        self.assertTrue((memory / "knowledge/index.md").exists())
+        context = self.run_script("hooks/dispatch.py", "start", "--root", str(memory))
+        self.assertIn("SQLite", context.stdout)
+
     def test_complete_synthetic_workflow(self):
         transcript = self.root / "rollout.jsonl"
         transcript.write_text(record("Use SQLite"))
         self.run_script("scripts/flush.py", str(transcript), "fixture")
         self.run_script("scripts/compile.py")
-        state = json.loads((self.root / "scripts/state.json").read_text())
+        state = json.loads((self.root / ".codex-memory-compiler/state.json").read_text())
         self.assertEqual(len(state["ingested"]), 1)
         self.assertTrue((self.root / "knowledge/concepts/sqlite.md").is_file())
         self.assertIn("Nothing to compile", self.run_script("scripts/compile.py").stdout)
@@ -272,24 +316,24 @@ class CliTests(unittest.TestCase):
         daily.mkdir()
         (daily / "2026-10-08.md").write_text("Use SQLite")
         self.run_script("scripts/compile.py", fail=True, FAKE_REFUSE="1")
-        self.assertFalse((self.root / "scripts/state.json").exists())
+        self.assertFalse((self.root / ".codex-memory-compiler/state.json").exists())
         self.run_script("scripts/compile.py")
-        before = (self.root / "scripts/state.json").read_bytes()
+        before = (self.root / ".codex-memory-compiler/state.json").read_bytes()
         self.run_script("scripts/compile.py", "--all", fail=True, FAKE_REFUSE="1")
-        self.assertEqual((self.root / "scripts/state.json").read_bytes(), before)
+        self.assertEqual((self.root / ".codex-memory-compiler/state.json").read_bytes(), before)
         self.run_script("scripts/query.py", "Database?", "--file-back", fail=True, FAKE_REFUSE="1")
-        self.assertEqual((self.root / "scripts/state.json").read_bytes(), before)
+        self.assertEqual((self.root / ".codex-memory-compiler/state.json").read_bytes(), before)
 
     def test_failure_and_empty_answer_do_not_mark_compiled(self):
         daily = self.root / "daily"
         daily.mkdir()
         (daily / "2026-10-08.md").write_text("Use SQLite")
         self.run_script("scripts/compile.py", fail=True, FAKE_FAIL="1")
-        self.assertFalse((self.root / "scripts/state.json").exists())
+        self.assertFalse((self.root / ".codex-memory-compiler/state.json").exists())
         self.run_script("scripts/compile.py", fail=True, FAKE_EMPTY="1")
-        self.assertFalse((self.root / "scripts/state.json").exists())
+        self.assertFalse((self.root / ".codex-memory-compiler/state.json").exists())
         self.run_script("scripts/query.py", "Database?", fail=True, FAKE_FAIL="1")
-        self.assertFalse((self.root / "scripts/state.json").exists())
+        self.assertFalse((self.root / ".codex-memory-compiler/state.json").exists())
         self.run_script("scripts/lint.py", fail=True, FAKE_FAIL="1")
 
 

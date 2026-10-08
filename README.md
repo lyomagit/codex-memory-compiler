@@ -24,16 +24,43 @@ python3 scripts/install_hooks.py --project /absolute/path/to/your/project
 On Windows use `python` instead of `python3`. The installer records the current Python
 executable and absolute script paths, including quoting for spaces. Keep this checkout in
 place. It merges `.codex/hooks.json`, backs up an existing file, and is safe to rerun.
-Without `--project`, it only prints the configuration. It never changes global settings.
+Without `--project`, it only prints the configuration. `--project` does not change global settings; `--user` explicitly selects user hooks.
 Review/trust the hooks through your Codex client's normal flow, then start a new session.
 If the project has inline `[hooks]` configuration, reconcile that with `hooks.json` as
 explained in the [Codex hooks documentation](https://learn.chatgpt.com/docs/hooks).
 
 **Installing capture opts the selected project's conversations into model processing.**
 The hook itself performs local I/O; its worker sends extracted conversation text to your
-configured Codex provider. Inspect sensitive inputs before enabling capture. Prompt-level
-secret exclusion is not a reliable redactor. Do not enable on secret-bearing conversations.
+configured Codex provider. Inspect sensitive inputs before enabling capture. Common credentials are filtered locally before model input and persisted output.
+Pattern-based filtering cannot recognize every secret. Do not enable on secret-bearing conversations.
 Do not point this checkout at an existing shared Wiki without a separate migration.
+
+## Integrate an existing Codex harness
+
+Code and memory data can live separately. To replace an older `codex-memory`
+installation's capture/inject handlers while keeping all unrelated guard hooks:
+
+```sh
+python3 scripts/install_hooks.py --user --root /absolute/path/to/memory --replace-legacy --dry-run
+python3 scripts/install_hooks.py --user --root /absolute/path/to/memory --replace-legacy
+```
+
+Review/trust the four changed handlers using Codex `/hooks`. The installer preserves
+unrelated handlers and their positions. The old executable, journal, daily notes and
+knowledge are retained. New cursors/state use `.codex-memory-compiler/` inside the data
+root, separately from older `.codex-memory/` state. Do not run both capture implementations
+for the same scope. The new parser starts each transcript at its beginning on first use;
+resuming an old conversation may overlap with notes made by the previous implementation.
+
+For manual commands against that memory, set `CODEX_MEMORY_ROOT` per invocation:
+
+```sh
+CODEX_MEMORY_ROOT=/absolute/path/to/memory python3 scripts/compile.py
+```
+
+PowerShell: set `$env:CODEX_MEMORY_ROOT` to the desired path before running commands.
+Installing on another machine requires its own local code/interpreter paths and hook trust.
+This installer does not synchronize memory between machines.
 
 ## Use
 
@@ -60,13 +87,14 @@ python3 scripts/flush.py /absolute/path/to/rollout.jsonl session-id
 1. `Stop`, `PreCompact`, and `SessionEnd` queue incremental capture. Repeated events reuse
    byte cursors; response messages are read once, excluding their `event_msg` mirrors.
 2. `codex exec` summarizes new messages into append-only `daily/YYYY-MM-DD.md`.
-3. After 18:00 local time, capture triggers compilation; manual compilation works anytime.
+3. After 18:00 local time, capture compiles today's updated daily log; manual compilation
+   can process the older backlog explicitly.
 4. The compiler writes `knowledge/concepts/`, `connections/`, `index.md`, and `log.md`.
 5. `SessionStart` injects a bounded index and recent daily excerpt, labeled as recall.
 6. Queries read the index and articles; `--file-back` stores an answer under `knowledge/qa/`.
 
-All installed projects share the memory in this checkout. Use separate checkouts for separate
-memory scopes. The upstream query implementation supplies all articles in the prompt; this
+Installed projects share the selected memory root (the checkout by default). Use distinct
+`--root` paths for separate memory scopes. The upstream query implementation supplies all articles in the prompt; this
 is intended for small bases, not unlimited retrieval.
 
 ## Failure behavior and boundaries
@@ -81,7 +109,7 @@ is intended for small bases, not unlimited retrieval.
 - Writing model runs use a `knowledge/`-rooted workspace sandbox; other runs are read-only.
   Codex user configuration, global instructions, hooks, and external tools still apply.
   The recursion guard suppresses only this project's hooks.
-- The JSONL rollout format is version-sensitive. Only `response_item` message text is
+- The JSONL rollout format is version-sensitive. Direct and nested `response_item` message text is
   supported; tools, reasoning, images, and audio are not captured.
 - Generated memory, reports, and operational state are ignored by Git. Existing upstream
   Markdown knowledge remains compatible. Claude SDK and Claude hook settings are replaced.
@@ -97,7 +125,8 @@ python3 scripts/compile.py --dry-run
 python3 scripts/lint.py --structural-only
 ```
 
-Automated tests use synthetic transcripts and a simulated Codex process. Real model output,
-Windows execution, and hook activation in a trusted desktop session require separate live checks.
+Automated tests use synthetic transcripts and a simulated Codex process. See the release
+verification notes for the separately exercised live-model and hook boundaries. Windows
+execution still requires a live check.
 See [AGENTS.md](AGENTS.md) for the article schema and runtime contract and the official
 [non-interactive mode reference](https://learn.chatgpt.com/docs/non-interactive-mode) for Codex CLI.

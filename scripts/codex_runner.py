@@ -5,6 +5,7 @@ import tempfile
 from pathlib import Path
 
 from config import KNOWLEDGE_DIR
+from redact import redact
 
 
 async def run_codex(prompt: str, *, writable: bool = False) -> str:
@@ -34,7 +35,7 @@ async def run_codex(prompt: str, *, writable: bool = False) -> str:
         )
         try:
             await asyncio.wait_for(
-                process.communicate((instructions + prompt).encode()), timeout=600,
+                process.communicate((instructions + redact(prompt)).encode()), timeout=600,
             )
         except (asyncio.TimeoutError, asyncio.CancelledError):
             process.kill()
@@ -45,4 +46,4 @@ async def run_codex(prompt: str, *, writable: bool = False) -> str:
             raise RuntimeError(f"codex exec failed with exit {process.returncode}")
         if not output.is_file() or not output.read_text(encoding="utf-8").strip():
             raise RuntimeError("codex exec returned no final answer")
-        return output.read_text(encoding="utf-8").strip()
+        return redact(output.read_text(encoding="utf-8").strip())

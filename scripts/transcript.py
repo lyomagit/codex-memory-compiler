@@ -1,11 +1,12 @@
 """Read Codex rollout response messages; event_msg mirrors are deliberately ignored."""
 import json
 from pathlib import Path
+from redact import redact
 
 
 INJECTED_PREFIXES = (
     "# AGENTS.md instructions", "<environment_context>", "<permissions instructions>",
-    "<user_instructions>", "<hook_prompt", "<external_codex_apps_open_page>",
+    "<user_instructions>", "<system_reminder>", "<skill>", "<hook_prompt", "<external_codex_apps_open_page>",
 )
 
 
@@ -22,11 +23,15 @@ def read_messages(path: Path, offset: int = 0):
             text = ""
             if isinstance(entry, dict) and entry.get("type") == "response_item":
                 item = entry.get("payload", {})
+                if isinstance(item, dict):
+                    item = item.get("item", item.get("message", item))
                 if isinstance(item, dict) and item.get("type") == "message":
                     role = item.get("role")
                     if role in ("user", "assistant") and item.get("phase") != "analysis":
                         content = item.get("content", [])
-                        if isinstance(content, list):
+                        if isinstance(content, str):
+                            text = content.strip()
+                        elif isinstance(content, list):
                             text = "\n".join(
                                 block["text"] for block in content
                                 if isinstance(block, dict)
@@ -36,5 +41,5 @@ def read_messages(path: Path, offset: int = 0):
                         if text.startswith(INJECTED_PREFIXES):
                             text = ""
                         if text:
-                            text = f"**{role.title()}:** {text}"
+                            text = f"**{role.title()}:** {redact(text)}"
             yield handle.tell(), text

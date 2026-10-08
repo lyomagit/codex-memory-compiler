@@ -6,6 +6,8 @@ import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "scripts"))
+from config import STATE_DIR
 
 
 def main():
@@ -23,7 +25,8 @@ def main():
         return
     options = ({"creationflags": subprocess.CREATE_NO_WINDOW} if os.name == "nt"
                else {"start_new_session": True})
-    with (ROOT / "scripts/flush.log").open("a", encoding="utf-8") as log:
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    with (STATE_DIR / "flush.log").open("a", encoding="utf-8") as log:
         subprocess.Popen(
             [sys.executable, str(ROOT / "scripts/flush.py"), str(path), session],
             cwd=ROOT, stdin=subprocess.DEVNULL, stdout=log, stderr=log,

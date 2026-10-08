@@ -6,11 +6,11 @@ from pathlib import Path
 import sys
 
 from codex_runner import run_codex
-from config import DAILY_DIR, SCRIPTS_DIR, now_iso, today_iso
+from config import DAILY_DIR, SCRIPTS_DIR, STATE_DIR, now_iso, today_iso
 from locking import memory_lock
 from transcript import read_messages
 
-STATE_FILE = SCRIPTS_DIR / "last-flush.json"
+STATE_FILE = STATE_DIR / "last-flush.json"
 MAX_CONTEXT_CHARS = 15000
 COMPILE_AFTER_HOUR = 18
 
@@ -26,6 +26,7 @@ async def run_flush(context: str) -> str:
 
 
 def capture(path: Path, session: str) -> bool:
+    STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
     state = json.loads(STATE_FILE.read_text()) if STATE_FILE.exists() else {}
     key = hashlib.sha256((session + str(path)).encode()).hexdigest()
     start = state.get(key, 0)
@@ -75,7 +76,7 @@ def main():
         changed = capture(Path(sys.argv[1]).resolve(), sys.argv[2])
     if changed and int(now_iso()[11:13]) >= COMPILE_AFTER_HOUR:
         import subprocess
-        result = subprocess.run([sys.executable, str(SCRIPTS_DIR / "compile.py")])
+        result = subprocess.run([sys.executable, str(SCRIPTS_DIR / "compile.py"), "--file", str(DAILY_DIR / f"{today_iso()}.md")])
         if result.returncode:
             raise SystemExit(result.returncode)
 

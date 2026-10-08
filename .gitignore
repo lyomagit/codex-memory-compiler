@@ -31,3 +31,6 @@ scripts/*.tmp
 Thumbs.db
 
 .obsidian/
+
+# Memory runtime state
+.codex-memory-compiler/

@@ -6,11 +6,9 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-# Paths relative to project root
-ROOT = Path(__file__).resolve().parent.parent
-KNOWLEDGE_DIR = ROOT / "knowledge"
-DAILY_DIR = ROOT / "daily"
-INDEX_FILE = KNOWLEDGE_DIR / "index.md"
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+from config import ROOT_DIR as ROOT, DAILY_DIR, KNOWLEDGE_DIR, INDEX_FILE
+from redact import redact
 
 MAX_CONTEXT_CHARS = 20_000
 MAX_LOG_LINES = 30
@@ -57,7 +55,7 @@ def build_context() -> str:
     if len(context) > MAX_CONTEXT_CHARS:
         context = context[:MAX_CONTEXT_CHARS] + "\n\n...(truncated)"
 
-    return context
+    return redact(context)
 
 
 def main():
