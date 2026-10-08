@@ -32,19 +32,16 @@ from utils import (
 ROOT_DIR = Path(__file__).resolve().parent.parent
 
 
-async def compile_daily_log(log_path: Path, state: dict) -> float:
+async def compile_daily_log(log_path: Path, state: dict) -> None:
     """Compile a single daily log into knowledge articles.
 
-    Returns the API cost of the compilation.
+    Records the source hash only after successful compilation.
     """
-    from claude_agent_sdk import (
-        AssistantMessage,
-        ClaudeAgentOptions,
-        ResultMessage,
-        TextBlock,
-        query,
-    )
+    from codex_runner import run_codex
 
+    source_hash = file_hash(log_path)
+    build_log = KNOWLEDGE_DIR / "log.md"
+    previous_log = build_log.read_text(encoding="utf-8") if build_log.exists() else ""
     log_content = log_path.read_text(encoding="utf-8")
     schema = AGENTS_FILE.read_text(encoding="utf-8")
     wiki_index = read_wiki_index()
@@ -91,7 +88,7 @@ Read the daily log above and compile it into wiki articles following the schema 
 
 ### Rules:
 
-1. **Extract key concepts** - Identify 3-7 distinct concepts worth their own article
+1. **Extract key concepts** - Identify distinct concepts worth their own article; never invent material to meet a quota
 2. **Create concept articles** in `knowledge/concepts/` - One .md file per concept
    - Use the exact article format from AGENTS.md (YAML frontmatter + sections)
    - Include `sources:` in frontmatter pointing to the daily log file
@@ -119,48 +116,23 @@ Read the daily log above and compile it into wiki articles following the schema 
 
 ### Quality standards:
 - Every article must have complete YAML frontmatter
-- Every article must link to at least 2 other articles via [[wikilinks]]
+- Link only to articles that exist or are created in this compilation
 - Key Points section should have 3-5 bullet points
 - Details section should have 2+ paragraphs
-- Related Concepts section should have 2+ entries
+- Related Concepts section should contain only supported relationships
 - Sources section should cite the daily log with specific claims extracted
 """
 
-    cost = 0.0
-
-    try:
-        async for message in query(
-            prompt=prompt,
-            options=ClaudeAgentOptions(
-                cwd=str(ROOT_DIR),
-                system_prompt={"type": "preset", "preset": "claude_code"},
-                allowed_tools=["Read", "Write", "Edit", "Glob", "Grep"],
-                permission_mode="acceptEdits",
-                max_turns=30,
-            ),
-        ):
-            if isinstance(message, AssistantMessage):
-                for block in message.content:
-                    if isinstance(block, TextBlock):
-                        pass  # compilation output - LLM writes files directly
-            elif isinstance(message, ResultMessage):
-                cost = message.total_cost_usd or 0.0
-                print(f"  Cost: ${cost:.4f}")
-    except Exception as e:
-        print(f"  Error: {e}")
-        return 0.0
-
-    # Update state
-    rel_path = log_path.name
-    state.setdefault("ingested", {})[rel_path] = {
-        "hash": file_hash(log_path),
+    await run_codex(prompt, writable=True)
+    if not (KNOWLEDGE_DIR / "index.md").exists() or not (KNOWLEDGE_DIR / "log.md").exists():
+        raise RuntimeError("Codex did not produce the knowledge index and build log")
+    if build_log.read_text(encoding="utf-8") == previous_log:
+        raise RuntimeError("Codex did not update the build log; source remains uncompiled")
+    state.setdefault("ingested", {})[log_path.name] = {
+        "hash": source_hash,
         "compiled_at": now_iso(),
-        "cost_usd": cost,
     }
-    state["total_cost"] = state.get("total_cost", 0.0) + cost
     save_state(state)
-
-    return cost
 
 
 def main():
@@ -208,17 +180,17 @@ def main():
         return
 
     # Compile each file sequentially
-    total_cost = 0.0
     for i, log_path in enumerate(to_compile, 1):
         print(f"\n[{i}/{len(to_compile)}] Compiling {log_path.name}...")
-        cost = asyncio.run(compile_daily_log(log_path, state))
-        total_cost += cost
+        asyncio.run(compile_daily_log(log_path, state))
         print(f"  Done.")
 
     articles = list_wiki_articles()
-    print(f"\nCompilation complete. Total cost: ${total_cost:.2f}")
+    print("\nCompilation complete. Usage is charged by your configured Codex provider.")
     print(f"Knowledge base: {len(articles)} articles")
 
 
 if __name__ == "__main__":
-    main()
+    from locking import memory_lock
+    with memory_lock():
+        main()

@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-from pathlib import Path
 
 from config import KNOWLEDGE_DIR, REPORTS_DIR, now_iso, today_iso
 from utils import (
@@ -28,9 +27,6 @@ from utils import (
     save_state,
     wiki_article_exists,
 )
-
-ROOT_DIR = Path(__file__).resolve().parent.parent
-
 
 def check_broken_links() -> list[dict]:
     """Check for [[wikilinks]] that point to non-existent articles."""
@@ -147,13 +143,7 @@ def check_sparse_articles() -> list[dict]:
 
 async def check_contradictions() -> list[dict]:
     """Use LLM to detect contradictions across articles."""
-    from claude_agent_sdk import (
-        AssistantMessage,
-        ClaudeAgentOptions,
-        ResultMessage,
-        TextBlock,
-        query,
-    )
+    from codex_runner import run_codex
 
     wiki_content = read_all_wiki_content()
 
@@ -179,20 +169,8 @@ If no issues found, output exactly: NO_ISSUES
 
 Do NOT output anything else - no preamble, no explanation, just the formatted lines."""
 
-    response = ""
     try:
-        async for message in query(
-            prompt=prompt,
-            options=ClaudeAgentOptions(
-                cwd=str(ROOT_DIR),
-                allowed_tools=[],
-                max_turns=2,
-            ),
-        ):
-            if isinstance(message, AssistantMessage):
-                for block in message.content:
-                    if isinstance(block, TextBlock):
-                        response += block.text
+        response = await run_codex(prompt)
     except Exception as e:
         return [{"severity": "error", "check": "contradiction", "file": "(system)", "detail": f"LLM check failed: {e}"}]
 
@@ -208,6 +186,9 @@ Do NOT output anything else - no preamble, no explanation, just the formatted li
                     "detail": line,
                 })
 
+    if response.strip() != "NO_ISSUES" and not issues:
+        issues.append({"severity": "error", "check": "contradiction", "file": "(system)",
+                       "detail": "Codex returned an unrecognized lint response"})
     return issues
 
 
@@ -275,7 +256,7 @@ def main():
         all_issues.extend(issues)
         print(f"    Found {len(issues)} issue(s)")
 
-    # LLM check (costs money)
+    # LLM check (uses the configured provider)
     if not args.structural_only:
         print("  Checking: Contradictions (LLM)...")
         issues = asyncio.run(check_contradictions())
@@ -309,4 +290,6 @@ def main():
 
 
 if __name__ == "__main__":
-    exit(main())
+    from locking import memory_lock
+    with memory_lock():
+        exit(main())

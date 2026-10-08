@@ -23,12 +23,14 @@ def load_state() -> dict:
     """Load persistent state from state.json."""
     if STATE_FILE.exists():
         return json.loads(STATE_FILE.read_text(encoding="utf-8"))
-    return {"ingested": {}, "query_count": 0, "last_lint": None, "total_cost": 0.0}
+    return {"ingested": {}, "query_count": 0, "last_lint": None}
 
 
 def save_state(state: dict) -> None:
     """Save state to state.json."""
-    STATE_FILE.write_text(json.dumps(state, indent=2), encoding="utf-8")
+    temporary = STATE_FILE.with_suffix(".tmp")
+    temporary.write_text(json.dumps(state, indent=2), encoding="utf-8")
+    temporary.replace(STATE_FILE)
 
 
 # ── File hashing ──────────────────────────────────────────────────────

@@ -14,29 +14,16 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-from pathlib import Path
 
 from config import KNOWLEDGE_DIR, QA_DIR, now_iso
 from utils import load_state, read_all_wiki_content, save_state
 
-ROOT_DIR = Path(__file__).resolve().parent.parent
-
-
 async def run_query(question: str, file_back: bool = False) -> str:
     """Query the knowledge base and optionally file the answer back."""
-    from claude_agent_sdk import (
-        AssistantMessage,
-        ClaudeAgentOptions,
-        ResultMessage,
-        TextBlock,
-        query,
-    )
+    from codex_runner import run_codex
 
     wiki_content = read_all_wiki_content()
-
-    tools = ["Read", "Glob", "Grep"]
-    if file_back:
-        tools.extend(["Write", "Edit"])
+    previous_qa = {p: p.read_bytes() for p in QA_DIR.glob("*.md")} if file_back else {}
 
     file_back_instructions = ""
     if file_back:
@@ -79,35 +66,13 @@ consulting the knowledge base below.
 {question}
 {file_back_instructions}"""
 
-    answer = ""
-    cost = 0.0
-
-    try:
-        async for message in query(
-            prompt=prompt,
-            options=ClaudeAgentOptions(
-                cwd=str(ROOT_DIR),
-                system_prompt={"type": "preset", "preset": "claude_code"},
-                allowed_tools=tools,
-                permission_mode="acceptEdits",
-                max_turns=15,
-            ),
-        ):
-            if isinstance(message, AssistantMessage):
-                for block in message.content:
-                    if isinstance(block, TextBlock):
-                        answer += block.text
-            elif isinstance(message, ResultMessage):
-                cost = message.total_cost_usd or 0.0
-    except Exception as e:
-        answer = f"Error querying knowledge base: {e}"
-
-    # Update state
+    answer = await run_codex(prompt, writable=file_back)
+    if file_back and not any(p not in previous_qa or p.read_bytes() != previous_qa[p]
+                             for p in QA_DIR.glob("*.md")):
+        raise RuntimeError("Codex did not create or update a Q&A article")
     state = load_state()
     state["query_count"] = state.get("query_count", 0) + 1
-    state["total_cost"] = state.get("total_cost", 0.0) + cost
     save_state(state)
-
     return answer
 
 
@@ -135,4 +100,6 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    from locking import memory_lock
+    with memory_lock():
+        main()
