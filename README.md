@@ -117,6 +117,18 @@ is intended for small bases, not unlimited retrieval.
 To disconnect, remove this checkout's commands from the selected project's `.codex/hooks.json`
 (or restore its installer backup if no later changes occurred). Preserve your memory files.
 
+## License and upstream rights
+
+Original copyrightable contributions authored by and owned by `lyomagit`
+are offered under the MIT License, as scoped in [LICENSE](LICENSE).
+This project also includes material adapted from
+[coleam00/claude-memory-compiler](https://github.com/coleam00/claude-memory-compiler).
+As checked on 2026-10-17, upstream did not publish an explicit license grant.
+**The MIT grant here does not cover upstream-derived material or authorize
+redistribution of the combined project.** Upstream permission or a suitable
+license must be obtained before representing the entire repository as
+MIT-licensed. Public visibility on GitHub is not itself an open-source license.
+
 ## Verification
 
 ```sh
