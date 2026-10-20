@@ -142,3 +142,53 @@ verification notes for the separately exercised live-model and hook boundaries. 
 execution still requires a live check.
 See [AGENTS.md](AGENTS.md) for the article schema and runtime contract and the official
 [non-interactive mode reference](https://learn.chatgpt.com/docs/non-interactive-mode) for Codex CLI.
+
+
+## Bounded query retrieval
+
+Normal queries now select up to five relevant articles **locally** from index summaries
+and filenames, then send only those Markdown articles to Codex (default 30,000
+combined article characters). No embeddings, network search, knowledge migration,
+or new runtime dependencies are required. The original all-article mode remains
+available for audit, unexpected misses, and compatibility:
+
+~~~sh
+python3 scripts/query.py "OAuth redirect and JWT"                        # selective (default)
+python3 scripts/query.py "OAuth redirect and JWT" --mode full            # original full KB
+python3 scripts/query.py "OAuth redirect and JWT" --top-k 8 --max-chars 50000
+python3 scripts/query.py "OAuth redirect and JWT" --representation json
+python3 scripts/query.py "OAuth redirect and JWT" --heuristics           # opt-in
+~~~
+
+The full index is still included for --file-back so the model can preserve
+existing rows during index updates. There is no promise of token savings in
+file-back mode. Empty lexical matches **do not** silently load all documents;
+use --mode full if the index is sparse or the terminology differs.
+
+The stored data remain Markdown and native [[wikilinks]]. Wire-format
+comparisons (markdown, html, json) do not convert or migrate the wiki.
+The HTML comparison is a lossless HTML preformatted envelope for the raw
+Markdown, **not** a test of semantic HTML rendering or model answer quality.
+
+### Reproducible measurement
+
+~~~sh
+python3 -m unittest discover -s tests -v
+python3 scripts/benchmark_retrieval.py --out /tmp/cmc-retrieval.json
+# Optional, in your chosen environment:
+python3 -m pip install tiktoken
+python3 scripts/benchmark_retrieval.py --require-tokens --encoding o200k_base --out /tmp/cmc-bpe.json
+# Evaluate actual answer links if you have a JSON question-to-answer map:
+python3 scripts/benchmark_retrieval.py --answers /path/to/answers.json
+# Test existing KB without modification and against an annotated case file:
+python3 scripts/benchmark_retrieval.py --knowledge-dir /path/to/knowledge --cases /path/to/cases.json
+~~~
+
+Without tiktoken, measured UTF-8 bytes are reported, and token counts are
+null, not silently approximated. BPE counts are specific to the chosen encoding,
+**not** Codex provider billing. Gold-reference coverage, link integrity, and
+optional scored model outputs have distinct fields; offline source retrieval
+does not prove final answer quality.
+
+See [docs/RETRIEVAL.md](docs/RETRIEVAL.md) for limitations, heuristic JSON
+schema, conflict handling and the labeled synthetic experiment.

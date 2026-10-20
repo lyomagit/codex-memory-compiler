@@ -1,0 +1,114 @@
+{
+  "version": 1,
+  "description": "Synthetic deterministic corpus; no personal data; retrieval mechanics only.",
+  "distractors": 80,
+  "documents": [
+    {
+      "id": "concepts/auth-redirect",
+      "summary": "OAuth redirect callback state nonce validation redirect URI allowlist",
+      "content": "# Auth redirect\nValidate OAuth callback state nonce and the exact redirect URI allowlist. See [[concepts/jwt-validation]]."
+    },
+    {
+      "id": "concepts/jwt-validation",
+      "summary": "JWT signature issuer audience expiry verification OAuth",
+      "content": "# JWT validation\nValidate JWT issuer audience signature and expiry. See [[concepts/auth-redirect]]."
+    },
+    {
+      "id": "concepts/sqlite-wal",
+      "summary": "SQLite WAL write-ahead logging transactions checkpoint",
+      "content": "# SQLite WAL\nUse SQLite WAL for concurrent reads. Checkpoint logs. See [[connections/sqlite-backups]]."
+    },
+    {
+      "id": "connections/sqlite-backups",
+      "summary": "SQLite WAL checkpoint and online backups",
+      "content": "# SQLite Backup\nUse SQLite backup API and WAL checkpoint for consistent backups. See [[concepts/sqlite-wal]]."
+    },
+    {
+      "id": "concepts/webhook-retries",
+      "summary": "Webhook delivery retry exponential backoff jitter",
+      "content": "# Webhook Retries\nUse exponential backoff plus jitter and bounded retries. See [[connections/webhook-idempotency]]."
+    },
+    {
+      "id": "connections/webhook-idempotency",
+      "summary": "Webhook idempotency keys retry deduplication",
+      "content": "# Webhook Idempotency\nPersist delivery IDs to deduplicate retries. See [[concepts/webhook-retries]]."
+    },
+    {
+      "id": "concepts/heuristic-conflicts",
+      "summary": "Dynamic heuristic conflict detection protected constraints",
+      "content": "# Heuristic Conflicts\nWithhold conflicting soft heuristics. Never disable protected constraints. See [[concepts/context-retrieval]]."
+    },
+    {
+      "id": "concepts/context-retrieval",
+      "summary": "Selective index context retrieval and dynamic relevant heuristics",
+      "content": "# Context Retrieval\nRetrieve only selected indexed articles to the prompt. See [[concepts/heuristic-conflicts]]."
+    },
+    {
+      "id": "concepts/obs-overlay",
+      "summary": "OBS hockey broadcast scoreboard scene overlay",
+      "content": "# OBS Scoreboard\nAdd transparent hockey scoreboard scene source in OBS."
+    },
+    {
+      "id": "concepts/audio-lufs",
+      "summary": "Audio LUFS loudness target true peak mastering",
+      "content": "# Audio Loudness\nTarget -14 LUFS and monitor true peak."
+    },
+    {
+      "id": "concepts/markdown-wikilinks",
+      "summary": "Markdown knowledge index Q&A wikilinks compatibility",
+      "content": "# Wikilinks\nPreserve Markdown and [[concepts/context-retrieval]] wikilinks and Q&A indexes."
+    }
+  ],
+  "cases": [
+    {
+      "question": "How should I validate OAuth redirect callback state and JWT issuer?",
+      "expected": [
+        "concepts/auth-redirect",
+        "concepts/jwt-validation"
+      ]
+    },
+    {
+      "question": "How to handle SQLite WAL checkpoint when creating backups?",
+      "expected": [
+        "concepts/sqlite-wal",
+        "connections/sqlite-backups"
+      ]
+    },
+    {
+      "question": "What retry backoff and idempotency approach works for webhooks?",
+      "expected": [
+        "concepts/webhook-retries",
+        "connections/webhook-idempotency"
+      ]
+    },
+    {
+      "question": "How should dynamic heuristics handle conflict and context retrieval?",
+      "expected": [
+        "concepts/heuristic-conflicts",
+        "concepts/context-retrieval"
+      ]
+    },
+    {
+      "question": "How do I add a scoreboard scene source in OBS broadcast?",
+      "expected": [
+        "concepts/obs-overlay"
+      ]
+    },
+    {
+      "question": "Which LUFS audio loudness target do we use?",
+      "expected": [
+        "concepts/audio-lufs"
+      ]
+    },
+    {
+      "question": "How are Markdown wikilinks and Q&A index entries preserved?",
+      "expected": [
+        "concepts/markdown-wikilinks"
+      ]
+    },
+    {
+      "question": "What is the neutrino quantum entanglement experiment?",
+      "expected": []
+    }
+  ]
+}
